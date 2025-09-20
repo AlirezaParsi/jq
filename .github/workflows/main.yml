@@ -15,12 +15,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
 
-      - name: Set up Android NDK (مستقیم دانلود کنیم)
+      - name: Set up Android NDK
         run: |
-          # دانلود مستقیم NDK بدون SDK کامل
           mkdir -p android-ndk
           cd android-ndk
-          wget https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
+          wget -q https://dl.google.com/android/repository/android-ndk-r27b-linux.zip
           unzip -q android-ndk-r27b-linux.zip
           echo "NDK_PATH=$(pwd)/android-ndk-r27b" >> $GITHUB_ENV
           echo "$(pwd)/android-ndk-r27b/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_PATH
@@ -34,28 +33,28 @@ jobs:
         run: |
           git clone https://github.com/AlirezaParsi/jq --depth=1
           cd jq
-          git submodule update --init --depth=1  # عمق submodule رو هم محدود کنیم
+          git submodule update --init --depth=1
 
-      - name: Build jq with optimization
+      - name: Build jq
         env:
           TARGET: ${{ matrix.target }}
           API: ${{ matrix.api_level }}
         run: |
           cd jq
           
-          # تنظیم مسیرهای کامپایلر
+          
           if [ "$TARGET" = "aarch64-linux-android" ]; then
             CLANG_TRIPLE="aarch64-linux-android"
-            ARCH="arm64-v8a"
+            ARCH_DIR="arm64-v8a"
           else
-            CLANG_TRIPLE="armv7a-linux-androideabi" 
-            ARCH="armeabi-v7a"
+            CLANG_TRIPLE="armv7a-linux-androideabi"
+            ARCH_DIR="armeabi-v7a"
           fi
           
           CC="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/${CLANG_TRIPLE}${API}-clang"
           STRIP="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
           
-          # Build با فلگ‌های بهینه‌سازی
+          # Build
           autoreconf -fi
           ./configure \
             --host="$TARGET" \
@@ -65,24 +64,18 @@ jobs:
             --disable-shared \
             CC="$CC" \
             AR="$NDK_PATH/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar" \
-            CFLAGS="-static -Os -flto -fuse-ld=lld -DNDEBUG" \
-            LDFLAGS="-static -Os -flto -fuse-ld=lld -s"
+            CFLAGS="-static -Os -flto -DNDEBUG" \
+            LDFLAGS="-static -Os -flto -s"
           
           make -j$(nproc)
-          
-          # Strip کردن برای کاهش حجم
           $STRIP --strip-all ./jq
           
           # ایجاد پوشه خروجی
-          mkdir -p ../output/$ARCH
-          mv ./jq "../output/$ARCH/jq"
-          
-          # بررسی اطلاعات باینری
-          file "../output/$ARCH/jq"
-          ls -la "../output/$ARCH/jq"
+          mkdir -p ../output/$ARCH_DIR
+          mv ./jq "../output/$ARCH_DIR/jq"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: jq-android-binaries
+          name: jq-${{ matrix.target }}  
           path: output/
